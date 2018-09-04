@@ -1,6 +1,6 @@
 
 #[derive(Debug)]
-enum HanabiErr {
+pub enum HanabiErr {
     MoveNotAllowed,
     RequestNotAllowed,
     NoHints,
