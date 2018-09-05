@@ -20,6 +20,30 @@ lazy_static! {
     };
 }
 
+lazy_static! {
+    static ref VEC_NORMAL_COLORS: Vec<NormalColor> = {
+        let mut v = Vec::new();
+        v.push(NormalColor::Red);
+        v.push(NormalColor::White);
+        v.push(NormalColor::Blue);
+        v.push(NormalColor::Yellow);
+        v.push(NormalColor::Green);
+        v
+    };
+}
+
+lazy_static! {
+    static ref VEC_NUMBERS: Vec<Number> = {
+        let mut v = Vec::new();
+        v.push(Number::One);
+        v.push(Number::Two);
+        v.push(Number::Three);
+        v.push(Number::Four);
+        v.push(Number::Five);
+        v
+    };
+}
+
 /*
 mod hanabi_err;
 use hanabi_err::*;
@@ -305,6 +329,25 @@ impl Move for HanabiMove<ExtendedCard> {
 /*   Helpers    */
 /*--------------*/
 
+pub fn generate_normal_deck() -> Vec<NormalCard>
+{
+    let mut deck = Vec::new();
+    for col in VEC_NORMAL_COLORS.iter() {
+        for num in VEC_NUMBERS.iter() {
+            for num_card in 0..CARD_FREQUENCIES[&*num] {
+                deck.push(NormalCard::new(*col, *num));
+            }
+        }
+    }
+    deck
+}
+
+pub fn generate_extended_deck() -> Vec<ExtendedCard>
+{
+    // TODO
+    Vec::new()
+}
+
 /**
  * @brief Create a Non Shuffled Deck
  */
@@ -318,6 +361,8 @@ pub fn generate_deck<C: Card>() -> Vec<C>
 
     for col in color_iter {
         for num in number_iter {
+
+            //let foo = C::new(col, num);
 
             // TODO: TODO: TODO: Compile error here, what the HECK is going on???
             //let foo = <C as Card>::new(col, num);
@@ -363,9 +408,11 @@ impl<C> Game<C>
     <<<C as Card>::ColorType as Color>::IterType as Iterator>::Item : Debug
 {
 
-    pub fn new() -> Game<C> {
+    pub fn new(deck : Vec<C>, _players: u8) -> Game<C> {
         Game {
-            deck    : generate_deck::<C>(),
+            // SUUUPER annoying that it can't create the deck itself and must be passed in. TODO
+            // FIX THIS
+            deck    : deck,
             discard : Vec::new(),
             board   : Vec::new(),
             player_hands : Vec::new(),
