@@ -4,3 +4,5 @@ version = "0.1.0"
 authors = ["Chris Evans <cevans3326@gmail.com>"]
 
 [dependencies]
+static_assertions = "*"
+lazy_static = "*"
