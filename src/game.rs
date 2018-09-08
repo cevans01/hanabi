@@ -1,10 +1,11 @@
 
 extern crate static_assertions;
 extern crate lazy_static;
+extern crate rand;
 
+use rand::{thread_rng, Rng};
 use std::fmt::Debug;
 //use static_assertions::{assert_impl};
-
 
 use std::collections::HashMap;
 
@@ -16,6 +17,18 @@ lazy_static! {
         m.insert(Number::Three, 2);
         m.insert(Number::Four,  2);
         m.insert(Number::Five,  1);
+        m
+    };
+}
+
+lazy_static! {
+    static ref NUMS_BELOW: HashMap<Number, Option<Number>> = {
+        let mut m = HashMap::new();
+        m.insert(Number::One,   None);
+        m.insert(Number::Two,   Some(Number::One));
+        m.insert(Number::Three, Some(Number::Two));
+        m.insert(Number::Four,  Some(Number::Three));
+        m.insert(Number::Five,  Some(Number::Four));
         m
     };
 }
@@ -214,11 +227,17 @@ impl Iterator for NumberTypeIter {
 /* ----- Card Types ------ */
 /* ----------------------- */
 pub trait Card : Debug {
-    type ColorType : Debug + Color;
-    type NumberType : Debug;
+    type ColorType : Debug + Color + PartialEq + Eq;
+    type NumberType : Debug + PartialEq + Eq + Ord + PartialOrd;
 
     fn new(col : Self::ColorType, num : Self::NumberType) -> Self;
+    fn get_color(&self) -> Self::ColorType;
+    fn get_number(&self) -> Self::NumberType;
+
+    // TODO: wtf why do I need this, why can't I use get_number()
+    fn get_real_number(&self) -> Number;
 }
+
 
 #[derive(Debug)]
 // DO NOT IMPL CLONE/COPY
@@ -239,6 +258,18 @@ impl Card for NormalCard {
     fn new(col : Self::ColorType, num : Self::NumberType) -> NormalCard {
         NormalCard{color : col, number : num  }
     }
+
+    fn get_color(&self) -> Self::ColorType {
+        self.color.clone()
+    }
+
+    fn get_number(&self) -> Self::NumberType {
+        self.number.clone()
+    }
+
+    fn get_real_number(&self) -> Number {
+        self.number.clone()
+    }
 }
 
 impl Card for ExtendedCard {
@@ -247,6 +278,18 @@ impl Card for ExtendedCard {
 
     fn new(col : Self::ColorType, num : Self::NumberType) -> ExtendedCard {
         ExtendedCard{color : col, number : num  }
+    }
+
+    fn get_color(&self) -> Self::ColorType {
+        self.color.clone()
+    }
+
+    fn get_number(&self) -> Self::NumberType {
+        self.number.clone()
+    }
+
+    fn get_real_number(&self) -> Number {
+        self.number.clone()
     }
 }
 
@@ -284,13 +327,26 @@ impl CardView for ExtendedCardView {
     type NumberType = Number;
 }
 
-pub struct UID(u64);
-pub struct PubID(u8);
+//#[derive(Debug)]
+//pub struct UID(u64);
+pub type UID = u64;
+
+//#[derive(Debug)]
+//pub struct PubID(u8);
+pub type PubID = u8;
+
+#[derive(Debug, Eq, PartialEq)]
 pub struct Player {
     pub public_id: PubID,
 
-    uid: UID,
-    cohorts: Vec<PubID>,
+    pub uid: UID,
+    pub cohorts: Vec<PubID>,
+}
+
+impl Player {
+    pub fn new(public_id: u8, uid: u64) -> Player {
+        Player { public_id : public_id, uid: uid, cohorts : Vec::new()  }
+    }
 }
 
 
@@ -307,23 +363,28 @@ pub enum HintType<C> where
     NumberHint(C::NumberType),
 }
 
-pub trait Move : Debug {
-    type Card;
-}
+type HintForPlayer<C> = (PubID, HintType<C>);
+
+//pub trait Move : Debug {
+//    type CardType : Card + Debug;
+//}
 
 #[derive(Debug)]
 pub enum HanabiMove<C: Card> {
     Play(C),
     Discard(C),
-    Hint(HintType<C>),
+    Hint(HintForPlayer<C>),
 }
 
+/*
 impl Move for HanabiMove<NormalCard> {
-    type Card = NormalCard;
+    type CardType = NormalCard;
 }
+
 impl Move for HanabiMove<ExtendedCard> {
-    type Card = ExtendedCard;
+    type CardType = ExtendedCard;
 }
+*/
 
 /*--------------*/
 /*   Helpers    */
@@ -364,8 +425,9 @@ pub fn generate_deck<C: Card>() -> Vec<C>
 
             //let foo = C::new(col, num);
 
-            // TODO: TODO: TODO: Compile error here, what the HECK is going on???
-            //let foo = <C as Card>::new(col, num);
+            /* TODO: XXX: TODO: Compile error here, what the HECK is going on???
+             * let foo = <C as Card>::new(col, num);
+             */
 
             println!("col = {:?}, num = {:?}", col, num);
         }
@@ -373,18 +435,35 @@ pub fn generate_deck<C: Card>() -> Vec<C>
     rv
 }
 
+fn generate_uid() -> UID {
+    rand::random::<u64>()
+}
+
 /**
  * @brief Create players, initialized with IDs
  */
-fn generate_players() -> Vec<Player> {
-    // TODO:
-    Vec::new()
+pub fn generate_players(num_players : usize) -> Vec<Player> {
+    assert!(num_players < 6 && num_players > 1);
+
+    let mut players = Vec::new();
+    let all_public_ids : Vec<u8> = (0..num_players as u8).collect();
+
+    // Create the players
+    for public_id in 0..num_players {
+        let uid = generate_uid();
+        let other_public_ids : Vec<u8> = all_public_ids.iter().filter(|&p| *p != public_id as u8).cloned().collect();
+        let new_player = Player{ public_id : public_id as u8, uid: uid, cohorts : other_public_ids };
+        players.push(new_player);
+    }
+    players
 }
 
 /**
  * @brief Shuffle an existing deck
  */
-fn shuffle<C: Card>(deck : &mut Vec<C>) { }
+fn shuffle_deck<C: Card>(deck : &mut Vec<C>) {
+    thread_rng().shuffle(&mut deck[..]);
+}
 
 
 /* Game */
@@ -408,7 +487,8 @@ impl<C> Game<C>
     <<<C as Card>::ColorType as Color>::IterType as Iterator>::Item : Debug
 {
 
-    pub fn new(deck : Vec<C>, _players: u8) -> Game<C> {
+    pub fn new(mut deck : Vec<C>, _players: u8) -> Game<C> {
+        shuffle_deck(&mut deck);
         Game {
             // SUUUPER annoying that it can't create the deck itself and must be passed in. TODO
             // FIX THIS
@@ -420,24 +500,66 @@ impl<C> Game<C>
             bombs : 3,
         }
     }
+
     // Move related functions
     /**
      * @brief Checks to see if the move follows the rules of hanabi
+     *      1.) If you don't have any hits, you can't hint
+     *      [... 2.) If the card isn't in your hand you can't play it ??? ...]
      */
-    fn legal_move<M : Move>(&self, mv : M) -> bool {/*TODO*/ false } 
+    fn legal_move(&self, mv : HanabiMove<C>) -> bool {
+        // TODO: consider rejecting hints that give no information?
+        match mv {
+            // You have hints to give and it's a legal hint
+            HanabiMove::Hint(hint) => self.hints != 0 && self.legal_hint(&hint),
+            // No way for a discard or a play to be illegal
+            _ => true,
+        }
+    }
+
+    fn legal_hint(&self, hint : &HintForPlayer<C>) -> bool {
+        let (target_player_id, hint_type) = hint;
+        let target_player_hand = &self.player_hands[*target_player_id as usize];
+        match hint_type {
+            HintType::ColorHint(color) => {
+                target_player_hand.iter().find(|x| x.get_color() == *color).is_some()
+            },
+            HintType::NumberHint(number) => {
+                target_player_hand.iter().find(|x| x.get_number() == *number).is_some()
+            },
+        }
+    }
 
     /**
      * @brief Checks to see if the card being played can be played on the current board. Usually,
-     * if this function returns true, the card will be "played". If not, it will be mvoed to the
+     * if this function returns true, the card will be "played". If not, it will be moved to the
      * discard pile.
      */
-    fn valid_play<M : Move>(&self, mv : M) -> bool {/*TODO*/ false }
+    fn valid_play(&self, card : C) -> bool {
+        let move_color = card.get_color();
+        let highest_num_of_color : Option<Number> = self.board.iter()
+                                    .filter(|c| c.get_color() == move_color)
+                                    .map(|c| c.get_real_number())
+                                    .max();
+
+        // Two conditions must be satisfied to be playable:
+        //  1.) The card can't already be played on the board
+        //  2.) The card just below this card must already be on the table
+        let move_number : Number = card.get_real_number();
+        if highest_num_of_color == Some(card.get_real_number()) {
+            return false;
+        }
+        if highest_num_of_color != NUMS_BELOW[&card.get_real_number()] {
+            return false
+        }
+        return true;
+    }
 
     /**
      * @brief Submit a move to the game, ending your turn. The game will complete the turn and then
      * deal the player a new card from the deck.
      */
-    //fn submit_move(&mut self, mv : Move) { }
+    //fn submit_move<M : Move>(&mut self, mv : M) { }
 
     /**
      * @brief Check to see if the game is done.
@@ -555,5 +677,31 @@ mod tests {
         for col in type_iter {
             println!("col = {:?}", col);
         }
+    }
+
+    #[test]
+    fn test_valid_play() {
+        let mut g = Game::new(Vec::new(), 0);
+        g.board.push(NormalCard::new(NormalColor::Blue, Number::One));
+        g.board.push(NormalCard::new(NormalColor::Blue, Number::Two));
+        g.board.push(NormalCard::new(NormalColor::Blue, Number::Three));
+
+        g.board.push(NormalCard::new(NormalColor::Red, Number::One));
+
+        assert_eq!( true,  g.valid_play(NormalCard::new(NormalColor::Blue, Number::Four)) );
+        assert_eq!( false, g.valid_play(NormalCard::new(NormalColor::Blue, Number::Five)) );
+        assert_eq!( false, g.valid_play(NormalCard::new(NormalColor::Blue, Number::Three)) );
+
+        assert_eq!( true,  g.valid_play(NormalCard::new(NormalColor::Red, Number::Two)) );
+
+        assert_eq!( true,  g.valid_play(NormalCard::new(NormalColor::Green, Number::One)) );
+        assert_eq!( false, g.valid_play(NormalCard::new(NormalColor::Green, Number::Two)) );
+    }
+
+    #[test]
+    fn test_generate_players() {
+        let players = generate_players(3);
+
+        println!("players = {:?}", players);
     }
 } /* test */
