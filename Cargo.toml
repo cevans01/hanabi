@@ -7,3 +7,7 @@ authors = ["Chris Evans <cevans3326@gmail.com>"]
 static_assertions = "*"
 lazy_static = "*"
 rand = "*"
+
+[[bin]]
+name = "main"
+path = "apps/main.rs"
