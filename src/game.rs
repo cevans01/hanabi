@@ -7,7 +7,10 @@ use rand::{thread_rng, Rng};
 use std::fmt::Debug;
 //use static_assertions::{assert_impl};
 
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
+
+const MAX_HINTS : u8 = 8;
+const NUM_BOMBS : u8 = 3;
 
 lazy_static! {
     static ref CARD_FREQUENCIES: HashMap<Number, u8> = {
@@ -246,7 +249,33 @@ pub struct HanabiCard<C> where
 {
     pub color : C,
     pub number : Number,
+
+    pub card_view : CardView<C>,
 }
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+/**
+ * @brief Represents a view onto the Card. The option sentinel represents the added possibility
+ * that the player doesn't know anything about this card. For instance, if a player has no
+ * knowledge about a card then its value will be CardView{ None, None }
+ */
+pub struct CardView<C> where
+    C: Color
+{
+    pub color: Option<C>,
+    pub number: Option<Number>,
+}
+
+impl<C> CardView<C> where
+    C: Color
+{
+    pub fn new() -> CardView<C> {
+        CardView {color: None, number: None}
+    }
+}
+
+pub type NormalCardView = CardView<NormalColor>;
+pub type ExtendedCardView = CardView<ExtendedColor>;
 
 pub type NormalCard = HanabiCard<NormalColor>;
 pub type ExtendedCard = HanabiCard<ExtendedColor>;
@@ -256,7 +285,7 @@ impl Card for NormalCard {
     type NumberType = Number;
 
     fn new(col : Self::ColorType, num : Self::NumberType) -> NormalCard {
-        NormalCard{color : col, number : num  }
+        NormalCard{color : col, number : num, card_view : NormalCardView::new() }
     }
 
     fn get_color(&self) -> Self::ColorType {
@@ -277,7 +306,7 @@ impl Card for ExtendedCard {
     type NumberType = Number;
 
     fn new(col : Self::ColorType, num : Self::NumberType) -> ExtendedCard {
-        ExtendedCard{color : col, number : num  }
+        ExtendedCard{color : col, number : num, card_view : ExtendedCardView::new() }
     }
 
     fn get_color(&self) -> Self::ColorType {
@@ -291,40 +320,6 @@ impl Card for ExtendedCard {
     fn get_real_number(&self) -> Number {
         self.number.clone()
     }
-}
-
-/* ----------------------- */
-/* --- CardView Types ---- */
-/* ----------------------- */
-pub trait CardView : Debug + Clone + Copy + Eq + PartialEq {
-    type ColorType : Color + Debug;
-    type NumberType : Debug;
-}
-
-#[derive(Debug, Clone, Copy, Eq, PartialEq)]
-/**
- * @brief Represents a view onto the Card. The option sentinel represents the added possibility
- * that the player doesn't know anything about this card. For instance, if a player has no
- * knowledge about a card then its value will be CardView{ None, None }
- */
-pub struct HanabiCardView<C> where
-    C: Color
-{
-    pub color: Option<C>,
-    pub number: Option<Number>,
-}
-
-pub type NormalCardView = HanabiCardView<NormalColor>;
-pub type ExtendedCardView = HanabiCardView<ExtendedColor>;
-
-impl CardView for NormalCardView {
-    type ColorType = NormalColor;
-    type NumberType = Number;
-}
-
-impl CardView for ExtendedCardView {
-    type ColorType = ExtendedColor;
-    type NumberType = Number;
 }
 
 //#[derive(Debug)]
@@ -390,13 +385,13 @@ impl Move for HanabiMove<ExtendedCard> {
 /*   Helpers    */
 /*--------------*/
 
-pub fn generate_normal_deck() -> Vec<NormalCard>
+pub fn generate_normal_deck() -> VecDeque<NormalCard>
 {
-    let mut deck = Vec::new();
+    let mut deck = VecDeque::new();
     for col in VEC_NORMAL_COLORS.iter() {
         for num in VEC_NUMBERS.iter() {
-            for num_card in 0..CARD_FREQUENCIES[&*num] {
-                deck.push(NormalCard::new(*col, *num));
+            for _num_card in 0..CARD_FREQUENCIES[&*num] {
+                deck.push_front(NormalCard::new(*col, *num));
             }
         }
     }
@@ -409,16 +404,17 @@ pub fn generate_extended_deck() -> Vec<ExtendedCard>
     Vec::new()
 }
 
+/*
 /**
  * @brief Create a Non Shuffled Deck
  */
-pub fn generate_deck<C: Card>() -> Vec<C> 
+pub fn generate_deck<C: Card>() -> VecDeque<C>
     where <<<C as Card>::ColorType as Color>::IterType as Iterator>::Item : Debug
 {
     let color_iter = <C::ColorType as Color>::new().get_iter();
     let number_iter = NumberTypeIter::new();
 
-    let rv = Vec::new();
+    let rv = VecDeque::new();
 
     for col in color_iter {
         for num in number_iter {
@@ -434,6 +430,7 @@ pub fn generate_deck<C: Card>() -> Vec<C>
     }
     rv
 }
+*/
 
 fn generate_uid() -> UID {
     rand::random::<u64>()
@@ -461,8 +458,11 @@ pub fn generate_players(num_players : usize) -> Vec<Player> {
 /**
  * @brief Shuffle an existing deck
  */
-fn shuffle_deck<C: Card>(deck : &mut Vec<C>) {
-    thread_rng().shuffle(&mut deck[..]);
+fn shuffle_deck<C: Card>(deck : VecDeque<C>) -> VecDeque<C> {
+    // TODO: copying out and back in sucks but it'll work for now
+    let mut temp = Vec::from(deck);
+    thread_rng().shuffle(&mut temp[..]);
+    return VecDeque::from(temp);
 }
 
 
@@ -472,14 +472,22 @@ pub struct Game<C>
     where C: Card,
     <<<C as Card>::ColorType as Color>::IterType as Iterator>::Item : Debug
 {
-    deck: Vec<C>,
+    // Stacks of cards
+    deck: VecDeque<C>,
     pub discard: Vec<C>,
     pub board: Vec<C>,
 
+    // Players and Player's cards
+    players : Vec<Player>,
     player_hands: Vec<Vec<C>>,
+    active_player : PubID,
 
+    // Counters
     pub hints : u8,
     pub bombs : u8,
+    pub turn_number : usize,
+    pub turns_since_last_pickup : Option<usize>,
+
 }
 
 impl<C> Game<C>
@@ -487,17 +495,62 @@ impl<C> Game<C>
     <<<C as Card>::ColorType as Color>::IterType as Iterator>::Item : Debug
 {
 
-    pub fn new(mut deck : Vec<C>, _players: u8) -> Game<C> {
-        shuffle_deck(&mut deck);
-        Game {
+    pub fn new(num_players: usize, mut deck: VecDeque<C>) -> Game<C> {
+        // TODO: should be able to generate_deck
+        //let mut deck = generate_deck::<C>();
+        let before_len = deck.len();
+        deck = shuffle_deck(deck);
+        assert!(deck.len() == before_len);
+        assert!(num_players < 6 && num_players > 1);
+        println!("deck.len() = {:?}", deck.len());
+        let mut g = Game {
             // SUUUPER annoying that it can't create the deck itself and must be passed in. TODO
             // FIX THIS
             deck    : deck,
             discard : Vec::new(),
             board   : Vec::new(),
+            players : generate_players(num_players),
             player_hands : Vec::new(),
-            hints : 10,
-            bombs : 3,
+            active_player : 0,
+            hints : MAX_HINTS,
+            bombs : NUM_BOMBS,
+            turn_number : 0,
+            turns_since_last_pickup : None,
+        };
+
+        for _ in 0..num_players {
+            g.player_hands.push(Vec::new());
+        }
+
+        g.deal_cards();
+
+        assert_eq!(num_players, g.player_hands.len());
+        assert_eq!(num_players, g.players.len());
+        return g;
+    }
+
+    /**
+     * @brief Deal cards from the Deck into Player's hands
+     *  According to the rules:
+     *      Deal a hand of 5 cards to each with 2 or 3 players
+     *      Deal a hand of 4 cards to each with 4 or 5 players
+     */
+    fn deal_cards(&mut self) {
+        let cards_to_deal = match self.players.len() {
+            2 | 3 => 5,
+            4 | 5 => 4,
+            _ => unreachable!(),
+        };
+        println!("cards_to_deal = {:?}", cards_to_deal);
+
+        for _ in 0..cards_to_deal {
+            //self.player_hands.iter()
+            for p in &mut self.player_hands {
+                let c = self.deck.pop_front().expect("deck doesn't have enough cards");
+                p.push( c );
+                //p.push( self.deck.pop_front().expect("deck doesn't have enough cards") );
+
+            }
         }
     }
 
@@ -505,14 +558,15 @@ impl<C> Game<C>
     /**
      * @brief Checks to see if the move follows the rules of hanabi
      *      1.) If you don't have any hits, you can't hint
+     *      2.) If you have max hints (10) then you can't discard
      *      [... 2.) If the card isn't in your hand you can't play it ??? ...]
      */
     fn legal_move(&self, mv : HanabiMove<C>) -> bool {
-        // TODO: consider rejecting hints that give no information?
         match mv {
             // You have hints to give and it's a legal hint
             HanabiMove::Hint(hint) => self.hints != 0 && self.legal_hint(&hint),
-            // No way for a discard or a play to be illegal
+            HanabiMove::Discard(_) => self.hints != MAX_HINTS,
+            // No way for a play to be illegal
             _ => true,
         }
     }
@@ -564,7 +618,22 @@ impl<C> Game<C>
     /**
      * @brief Check to see if the game is done.
      */
-    fn finished(&self) -> bool {/*TODO*/ false }
+    fn finished(&self) -> bool {
+        // You win
+        if 25 == self.board.len() {
+            return true;
+        }
+        // You lose
+        if 0 == self.bombs {
+            return true;
+        }
+
+        match self.turns_since_last_pickup {
+            None => false,
+            Some(turns) if turns >= self.players.len() => true,
+            Some(_) => false
+        }
+    }
     
 //    // Player related functions
 //    /**
@@ -614,13 +683,13 @@ mod tests {
     #[test]
     fn card_view_clone() {
         let x = NormalCardView{ color : Some(NormalColor::Red), number : Some(Number::One) };
-        let y = x.clone();
+        let _y = x.clone();
     }
 
     #[test]
     fn card_clone() {
-        let x = NormalCard{ color : NormalColor::Red, number : Number::One };
-        //let y = x.clone();
+        let _x = NormalCard{ color : NormalColor::Red, number : Number::One, card_view: NormalCardView::new() };
+        //let y = x.clone(); // TODO: static assert that this doesn't compile somehow?
     }
 
     #[test]
@@ -640,7 +709,7 @@ mod tests {
         assert_eq!(type_iter.next(), Some(NormalColor::Green));
         assert_eq!(type_iter.next(), None);
 
-        let mut type_iter = NormalColorTypeIter::from(NormalColor::Red);
+        let type_iter = NormalColorTypeIter::from(NormalColor::Red);
         for col in type_iter {
             println!("col = {:?}", col);
         }
@@ -657,7 +726,7 @@ mod tests {
         assert_eq!(type_iter.next(), Some(ExtendedColor::Rainbow));
         assert_eq!(type_iter.next(), None);
 
-        let mut type_iter = ExtendedColorTypeIter::from(ExtendedColor::Red);
+        let type_iter = ExtendedColorTypeIter::from(ExtendedColor::Red);
         for col in type_iter {
             println!("col = {:?}", col);
         }
@@ -673,7 +742,7 @@ mod tests {
         assert_eq!(type_iter.next(), Some(Number::Five));
         assert_eq!(type_iter.next(), None);
 
-        let mut type_iter = NumberTypeIter::new();
+        let type_iter = NumberTypeIter::new();
         for col in type_iter {
             println!("col = {:?}", col);
         }
@@ -681,7 +750,8 @@ mod tests {
 
     #[test]
     fn test_valid_play() {
-        let mut g = Game::new(Vec::new(), 0);
+        let deck = generate_normal_deck();
+        let mut g = Game::new(3, deck);
         g.board.push(NormalCard::new(NormalColor::Blue, Number::One));
         g.board.push(NormalCard::new(NormalColor::Blue, Number::Two));
         g.board.push(NormalCard::new(NormalColor::Blue, Number::Three));
@@ -704,4 +774,5 @@ mod tests {
 
         println!("players = {:?}", players);
     }
+
 } /* test */
