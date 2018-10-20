@@ -13,9 +13,17 @@ use hanabi::card::*;
 pub fn play() {
 
     let deck = generate_normal_deck();
-    let _g = Game::<NormalCard>::new(3, deck);
+    let g = Game::<NormalCard>::new(3, deck);
 
-    let _x = HanabiErr::MoveNotAllowed;
+    println!("{:?}", g.player_hands[0]);
+
+    //comms::init_player_interfaces();
+
+    //comms::send_players_initial_state(&g);
+    
+    //while !g.finished() {
+        //comms::get_move()
+    //}
 }
 
 pub fn main() {

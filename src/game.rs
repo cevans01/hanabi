@@ -12,6 +12,7 @@ use player::*;
 use hanabi_move::*;
 use constants::*;
 use card::*;
+use hanabi_err::*;
 
 
 /*--------------*/
@@ -54,7 +55,8 @@ pub fn generate_deck<C: Card>() -> VecDeque<C>
 
             //let foo = C::new(col, num);
 
-            /* TODO: XXX: TODO: Compile error here, what the HECK is going on???
+            /* TODO: XXX: TODO: Compile error here when used inside Game::new(), what the HECK is
+             * going on???
              * let foo = <C as Card>::new(col, num);
              */
 
@@ -105,6 +107,9 @@ impl<C> Game<C>
     <<<C as Card>::ColorType as Color>::IterType as Iterator>::Item : Debug
 {
 
+    /**
+     * @brief Create a new Game
+     */
     pub fn new(num_players: usize, mut deck: VecDeque<C>) -> Game<C> {
         // TODO: should be able to generate_deck
         //let mut deck = generate_deck::<C>();
@@ -154,12 +159,9 @@ impl<C> Game<C>
         println!("cards_to_deal = {:?}", cards_to_deal);
 
         for _ in 0..cards_to_deal {
-            //self.player_hands.iter()
             for p in &mut self.player_hands {
                 let c = self.deck.pop_front().expect("deck doesn't have enough cards");
                 p.push( c );
-                //p.push( self.deck.pop_front().expect("deck doesn't have enough cards") );
-
             }
         }
     }
@@ -181,6 +183,14 @@ impl<C> Game<C>
         }
     }
 
+    /**
+     * @brief Checks to see if a hint is legal in the game
+     *
+     *      1.) You can't give a hint for a number to a player if the player doesn't have any cards
+     *        of that number
+     *      2.) You can't give a hint for a color to a player if the player doesn't have any cards
+     *        of that color
+     */
     fn legal_hint(&self, hint : &HintForPlayer<C>) -> bool {
         let (target_player_id, hint_type) = hint;
         let target_player_hand = &self.player_hands[*target_player_id as usize];
@@ -206,9 +216,8 @@ impl<C> Game<C>
                                     .map(|c| c.get_real_number())
                                     .max();
 
-        // Two conditions must be satisfied to be playable:
-        //  1.) The card can't already be played on the board
-        //  2.) The card just below this card must already be on the table
+        // Condition which must be satisfied to be playable:
+        //  1.) The highest number of this suit must be the number just below this card (if any)
         if highest_num_of_color != NUMS_BELOW[&card.get_real_number()] {
             return false
         }
@@ -241,16 +250,32 @@ impl<C> Game<C>
         }
     }
     
-//    // Player related functions
-//    /**
-//     * @brief Get a look at another player's hand. You must submit your own player UID here, and
-//     * the public ID of the player you are requesting the cards for. This is to prevent players
-//     * requesting their own hands, which is not legal.
-//     *
-//     * @return If you are allowed to request the player's hand, a Vec<Card> for that player
-//     */
-//    //pub fn get_player_cards(&self, requesting_player_uid : UID, target_player_pubid : PubID) -> Result<Vec<CardView>, HanabiErr> { }
-//
+    // Player related functions
+    /**
+     * @brief Get a look at another player's hand. You must submit your own player UID here, and
+     * the public ID of the player you are requesting the cards for. This is to prevent players
+     * requesting their own hands, which is not legal.
+     *
+     * @return If you are allowed to request the player's hand, a Vec<Card> for that player
+     */
+    pub fn get_player_cards(&self, requesting_player_uid : UID, target_player_pubid : PubID) -> 
+            Result<Vec<CardView<<C as Card>::ColorType>>, HanabiErr>
+    {
+        // Validate you are allowed to request this
+        if let Some(player) = self.players.iter().find(|p| p.uid == requesting_player_uid) {
+            if let Some(cohort_pub_id) = player.cohorts.iter().find(|&c| target_player_pubid == *c) {
+                return Ok(Vec::new());
+            }
+            else{
+                return Err(HanabiErr::RequestNotAllowed);
+            }
+        }
+        else {
+            return Err(HanabiErr::RequestNotAllowed);
+        }
+
+    }
+
 //    /**
 //     * @brief Get a Vec of CardView representing the knowledge that another player has of their own
 //     * hand. It is valid to call this against your own Player::public_id

@@ -258,6 +258,14 @@ impl Card for ExtendedCard {
     }
 }
 
+//fn cards_to_cardview<C : Card>(cards: &Vec<C>) -> CardView< <C as Card>::ColorType> {
+//    cards.iter().map(|c| c.card_view).cloned().collect()
+//}
+
+//fn cards_to_cardview<C : Card>(card: &C) -> CardView< <C as Card>::ColorType> {
+    //card.card_view
+//}
+
 #[cfg(test)]
 mod tests {
     use super::*;
