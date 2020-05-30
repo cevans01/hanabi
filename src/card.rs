@@ -1,356 +1,132 @@
-/*------------*/
-/* Game Types */
-/*------------*/
+extern crate bitflags;
 
-use std::fmt::Debug;
+use crate::errors::HanabiError;
 
-pub trait Color : Clone + Copy + Debug {
-    type IterType : Debug + Iterator;
-    fn new() -> Self;
-    fn get_iter(&self) -> Self::IterType;
+// TODO: make a macro that makes both Color, ColorKnowledge, and impls the From trait
+// TODO: same with Number, etc...
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum Color {
+    Red = 0b00001,
+    White = 0b00010,
+    Blue = 0b00100,
+    Green = 0b01000,
+    Yellow = 0b10000,
 }
 
-#[derive(Debug,Copy,Clone,Eq,PartialEq)]
-pub enum NormalColor {
-    Red,
-    White,
-    Blue,
-    Yellow,
-    Green,
-}
-
-#[derive(Debug)]
-pub struct NormalColorTypeIter(pub Option<NormalColor>);
-
-impl NormalColorTypeIter {
-    fn new() -> NormalColorTypeIter {
-        NormalColorTypeIter(Some(NormalColor::Red))
-    }
-}
-
-impl<'a> From<&'a NormalColor> for NormalColorTypeIter {
-    fn from(col : &NormalColor) -> NormalColorTypeIter {
-        NormalColorTypeIter(Some(col.clone()))
-    }
-}
-
-impl From<NormalColor> for NormalColorTypeIter {
-    fn from(col : NormalColor) -> NormalColorTypeIter {
-        NormalColorTypeIter(Some(col.clone()))
-    }
-}
-
-impl Iterator for NormalColorTypeIter {
-    type Item = NormalColor;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let rv = self.0.clone();
-        self.0 = match self.0 {
-            Some(NormalColor::Red)    => Some(NormalColor::White),
-            Some(NormalColor::White)  => Some(NormalColor::Blue),
-            Some(NormalColor::Blue)   => Some(NormalColor::Yellow),
-            Some(NormalColor::Yellow) => Some(NormalColor::Green),
-            Some(NormalColor::Green)  => None,
-            None => None,
-        };
-        return rv;
-    }
-}
-
-
-#[derive(Debug,Copy,Clone,Eq,PartialEq)]
-pub enum ExtendedColor {
-    Red,
-    White,
-    Blue,
-    Yellow,
-    Green,
-    Rainbow,
-}
-
-#[derive(Debug)]
-pub struct ExtendedColorTypeIter(pub Option<ExtendedColor>);
-
-impl ExtendedColorTypeIter {
-    fn new() -> ExtendedColorTypeIter {
-        ExtendedColorTypeIter(Some(ExtendedColor::Red))
-    }
-}
-
-impl<'a> From<&'a ExtendedColor> for ExtendedColorTypeIter {
-    fn from(col : &ExtendedColor) -> ExtendedColorTypeIter {
-        ExtendedColorTypeIter(Some(col.clone()))
-    }
-}
-
-impl From<ExtendedColor> for ExtendedColorTypeIter {
-    fn from(col : ExtendedColor) -> ExtendedColorTypeIter {
-        ExtendedColorTypeIter(Some(col.clone()))
-    }
-}
-
-impl Iterator for ExtendedColorTypeIter {
-    type Item = ExtendedColor;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let rv = self.0.clone();
-        self.0 = match self.0 {
-            Some(ExtendedColor::Red)    => Some(ExtendedColor::White),
-            Some(ExtendedColor::White)  => Some(ExtendedColor::Blue),
-            Some(ExtendedColor::Blue)   => Some(ExtendedColor::Yellow),
-            Some(ExtendedColor::Yellow) => Some(ExtendedColor::Green),
-            Some(ExtendedColor::Green)  => Some(ExtendedColor::Rainbow),
-            Some(ExtendedColor::Rainbow)  => None,
-            None => None,
-        };
-        return rv;
-    }
-}
-
-impl Color for NormalColor {
-    type IterType = NormalColorTypeIter;
-    fn new() -> NormalColor {
-        NormalColor::Red
-    }
-    fn get_iter(&self) -> Self::IterType {
-        NormalColorTypeIter::new()
-    }
-}
-
-impl Color for ExtendedColor {
-    type IterType = ExtendedColorTypeIter;
-    fn new() -> ExtendedColor {
-        ExtendedColor::Red
-    }
-    fn get_iter(&self) -> Self::IterType {
-        ExtendedColorTypeIter::new()
-    }
-}
-
-
-// TODO: consider impl `From` for u8
-#[derive(Debug,PartialOrd,Ord,PartialEq,Eq,Copy,Clone,Hash)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Number {
-    One,
-    Two,
-    Three,
-    Four,
-    Five,
+    One = 0b00001,
+    Two = 0b00010,
+    Three = 0b00100,
+    Four = 0b01000,
+    Five = 0b10000,
 }
 
-#[derive(Debug,Clone,Copy)]
-struct NumberTypeIter(pub Option<Number>);
-impl NumberTypeIter {
-    pub fn new() -> NumberTypeIter {
-        NumberTypeIter(Some(Number::One))
-    }
+#[derive(Debug, PartialEq)]
+pub struct Card {
+    pub color: Color,
+    pub number: Number,
 }
-impl Iterator for NumberTypeIter {
-    type Item = Number;
 
-    fn next(&mut self) -> Option<Self::Item> {
-        let rv = self.0.clone();
-        self.0  = match self.0 {
-            Some(Number::One)   => Some(Number::Two),
-            Some(Number::Two)   => Some(Number::Three),
-            Some(Number::Three) => Some(Number::Four),
-            Some(Number::Four)  => Some(Number::Five),
-            Some(Number::Five)  => None,
-            None => None,
-        };
-        return rv;
+// Private here
+bitflags! {
+    #[derive(Default)]
+    pub struct ColorKnowledge: u32 {
+        const RED    = Color::Red    as u32;
+        const WHITE  = Color::White  as u32;
+        const BLUE   = Color::Blue   as u32;
+        const GREEN  = Color::Green  as u32;
+        const YELLOW = Color::Yellow as u32;
+        const ALL_COLORS = Self::RED.bits | Self::WHITE.bits | Self::BLUE.bits | Self::GREEN.bits | Self::YELLOW.bits;
     }
 }
 
-/* ----------------------- */
-/* ----- Card Types ------ */
-/* ----------------------- */
-pub trait Card : Debug {
-    type ColorType : Debug + Color + PartialEq + Eq;
-    type NumberType : Debug + PartialEq + Eq + Ord + PartialOrd;
-
-    fn new(col : Self::ColorType, num : Self::NumberType) -> Self;
-    fn get_color(&self) -> Self::ColorType;
-    fn get_number(&self) -> Self::NumberType;
-
-    // TODO: wtf why do I need this, why can't I use get_number()
-    fn get_real_number(&self) -> Number;
-}
-
-
-#[derive(Debug)]
-// DO NOT IMPL CLONE/COPY
-pub struct HanabiCard<C> where
-    C: Color
-{
-    pub color : C,
-    pub number : Number,
-
-    pub card_view : CardView<C>,
-}
-
-#[derive(Debug, Clone, Copy, Eq, PartialEq)]
-/**
- * @brief Represents a view onto the Card. The option sentinel represents the added possibility
- * that the player doesn't know anything about this card. For instance, if a player has no
- * knowledge about a card then its value will be CardView{ None, None }
- */
-pub struct CardView<C> where
-    C: Color
-{
-    pub color: Option<C>,
-    pub number: Option<Number>,
-}
-
-impl<C> CardView<C> where
-    C: Color
-{
-    pub fn new() -> CardView<C> {
-        CardView {color: None, number: None}
+bitflags! {
+    #[derive(Default)]
+    pub struct NumberKnowledge: u32 {
+        const ONE   = Number::One   as u32;
+        const TWO   = Number::Two   as u32;
+        const THREE = Number::Three as u32;
+        const FOUR  = Number::Four  as u32;
+        const FIVE  = Number::Five  as u32;
+        const ALL_NUMBERS = Self::ONE.bits | Self::TWO.bits | Self::THREE.bits | Self::FOUR.bits | Self::FIVE.bits;
     }
 }
 
-pub type NormalCardView = CardView<NormalColor>;
-pub type ExtendedCardView = CardView<ExtendedColor>;
-
-pub type NormalCard = HanabiCard<NormalColor>;
-pub type ExtendedCard = HanabiCard<ExtendedColor>;
-
-impl Card for NormalCard {
-    type ColorType = NormalColor;
-    type NumberType = Number;
-
-    fn new(col : Self::ColorType, num : Self::NumberType) -> NormalCard {
-        NormalCard{color : col, number : num, card_view : NormalCardView::new() }
-    }
-
-    fn get_color(&self) -> Self::ColorType {
-        self.color.clone()
-    }
-
-    fn get_number(&self) -> Self::NumberType {
-        self.number.clone()
-    }
-
-    fn get_real_number(&self) -> Number {
-        self.number.clone()
-    }
-}
-
-impl Card for ExtendedCard {
-    type ColorType = ExtendedColor;
-    type NumberType = Number;
-
-    fn new(col : Self::ColorType, num : Self::NumberType) -> ExtendedCard {
-        ExtendedCard{color : col, number : num, card_view : ExtendedCardView::new() }
-    }
-
-    fn get_color(&self) -> Self::ColorType {
-        self.color.clone()
-    }
-
-    fn get_number(&self) -> Self::NumberType {
-        self.number.clone()
-    }
-
-    fn get_real_number(&self) -> Number {
-        self.number.clone()
-    }
-}
-
-//fn cards_to_cardview<C : Card>(cards: &Vec<C>) -> CardView< <C as Card>::ColorType> {
-//    cards.iter().map(|c| c.card_view).cloned().collect()
-//}
-
-//fn cards_to_cardview<C : Card>(card: &C) -> CardView< <C as Card>::ColorType> {
-    //card.card_view
-//}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn number_eq() {
-        assert_eq!(Number::One, Number::One);
-        assert_eq!(Number::Two, Number::Two);
-        assert_eq!(Number::Three, Number::Three);
-        assert_eq!(Number::Four, Number::Four);
-        assert_eq!(Number::Five, Number::Five);
-    }
-
-    #[test]
-    fn number_ord() {
-        assert!( Number::One < Number::Two );
-        assert!( Number::Two < Number::Three );
-        assert!( Number::Three < Number::Four );
-        assert!( Number::Four < Number::Five );
-    }
-
-    #[test]
-    fn card_view_clone() {
-        let x = NormalCardView{ color : Some(NormalColor::Red), number : Some(Number::One) };
-        let _y = x.clone();
-    }
-
-    #[test]
-    fn card_clone() {
-        let _x = NormalCard{ color : NormalColor::Red, number : Number::One, card_view: NormalCardView::new() };
-        //let y = x.clone(); // TODO: static assert that this doesn't compile somehow?
-    }
-
-    #[test]
-    fn card_view_eq() {
-        let x = NormalCardView{ color : Some(NormalColor::Red), number : Some(Number::One) };
-        let y = NormalCardView{ color : Some(NormalColor::Red), number : Some(Number::One) };
-        assert_eq!(x,y);
-    }
-
-    #[test]
-    fn normal_color_iter() {
-        let mut type_iter = NormalColorTypeIter::from(NormalColor::Red);
-        assert_eq!(type_iter.next(), Some(NormalColor::Red));
-        assert_eq!(type_iter.next(), Some(NormalColor::White));
-        assert_eq!(type_iter.next(), Some(NormalColor::Blue));
-        assert_eq!(type_iter.next(), Some(NormalColor::Yellow));
-        assert_eq!(type_iter.next(), Some(NormalColor::Green));
-        assert_eq!(type_iter.next(), None);
-
-        let type_iter = NormalColorTypeIter::from(NormalColor::Red);
-        for col in type_iter {
-            println!("col = {:?}", col);
+impl From<Color> for ColorKnowledge {
+    fn from(color: Color) -> Self {
+        match color {
+            Color::Red => ColorKnowledge::RED,
+            Color::White => ColorKnowledge::WHITE,
+            Color::Blue => ColorKnowledge::BLUE,
+            Color::Green => ColorKnowledge::GREEN,
+            Color::Yellow => ColorKnowledge::YELLOW,
         }
     }
+}
 
-    #[test]
-    fn extended_color_iter() {
-        let mut type_iter = ExtendedColorTypeIter::from(ExtendedColor::Red);
-        assert_eq!(type_iter.next(), Some(ExtendedColor::Red));
-        assert_eq!(type_iter.next(), Some(ExtendedColor::White));
-        assert_eq!(type_iter.next(), Some(ExtendedColor::Blue));
-        assert_eq!(type_iter.next(), Some(ExtendedColor::Yellow));
-        assert_eq!(type_iter.next(), Some(ExtendedColor::Green));
-        assert_eq!(type_iter.next(), Some(ExtendedColor::Rainbow));
-        assert_eq!(type_iter.next(), None);
-
-        let type_iter = ExtendedColorTypeIter::from(ExtendedColor::Red);
-        for col in type_iter {
-            println!("col = {:?}", col);
+impl From<Number> for NumberKnowledge {
+    fn from(color: Number) -> Self {
+        match color {
+            Number::One => NumberKnowledge::ONE,
+            Number::Two => NumberKnowledge::TWO,
+            Number::Three => NumberKnowledge::THREE,
+            Number::Four => NumberKnowledge::FOUR,
+            Number::Five => NumberKnowledge::FIVE,
         }
     }
+}
 
-    #[test]
-    fn number_type_iter() {
-        let mut type_iter = NumberTypeIter::new();
-        assert_eq!(type_iter.next(), Some(Number::One));
-        assert_eq!(type_iter.next(), Some(Number::Two));
-        assert_eq!(type_iter.next(), Some(Number::Three));
-        assert_eq!(type_iter.next(), Some(Number::Four));
-        assert_eq!(type_iter.next(), Some(Number::Five));
-        assert_eq!(type_iter.next(), None);
+// The best way to keep knowledge about a card is to keep track of what you *don't* know about the
+// card. Much easier to keep track of.
+#[derive(Default)]
+pub struct CardKnowledge {
+    pub not_these_colors: ColorKnowledge,
+    pub not_these_numbers: NumberKnowledge,
+}
 
-        let type_iter = NumberTypeIter::new();
-        for col in type_iter {
-            println!("col = {:?}", col);
+impl CardKnowledge {
+    pub fn new() -> Self {
+        CardKnowledge {
+            not_these_colors: Default::default(),
+            not_these_numbers: Default::default(),
         }
+    }
+}
+
+pub fn apply_color_knowledge(
+    ck: CardKnowledge,
+    color: Color,
+) -> Result<CardKnowledge, HanabiError> {
+    let new_colors = ck.not_these_colors | color.into();
+
+    if new_colors == ColorKnowledge::ALL_COLORS {
+        Err(HanabiError::LogicError(
+            "Impossible for a card to not be every color".to_string(),
+        ))
+    } else {
+        Ok(CardKnowledge {
+            not_these_colors: new_colors,
+            not_these_numbers: ck.not_these_numbers,
+        })
+    }
+}
+
+pub fn apply_number_knowledge(
+    ck: CardKnowledge,
+    number: Number,
+) -> Result<CardKnowledge, HanabiError> {
+    let new_numbers = ck.not_these_numbers | number.into();
+
+    if new_numbers == NumberKnowledge::ALL_NUMBERS {
+        Err(HanabiError::LogicError(
+            "Impossible for a card to not be every number".to_string(),
+        ))
+    } else {
+        Ok(CardKnowledge {
+            not_these_colors: ck.not_these_colors,
+            not_these_numbers: new_numbers,
+        })
     }
 }
