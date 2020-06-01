@@ -14,7 +14,7 @@ pub enum Color {
     Yellow = 0b10000,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Number {
     One = 0b00001,
     Two = 0b00010,

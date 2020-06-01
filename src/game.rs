@@ -1,4 +1,5 @@
 use std::collections::VecDeque;
+use std::convert::TryInto;
 
 use rand::seq::SliceRandom;
 use rand::thread_rng;
@@ -6,8 +7,8 @@ use rand::thread_rng;
 use crate::card::Card;
 use crate::errors::HanabiError;
 use crate::moves::{HanabiMove, Hint, HintForPlayer};
-use crate::player::{generate_players, Player, PubID, UID};
-use crate::rules::{MAX_HINTS, NUM_BOMBS};
+use crate::player::{generate_players, get_public_id, Player, PubID, UID};
+use crate::rules::{number_below, MAX_HINTS, NUM_BOMBS};
 
 /**
  * @brief Shuffle an existing deck
@@ -37,7 +38,9 @@ pub struct Game {
     pub hints: u8,
     pub bombs: u8,
     pub turn_number: usize,
-    //pub turns_since_last_pickup : Option<usize>,
+    // TODO: consider removing this since it can likely be calculated from the number of cards in
+    // the players' hands.
+    pub turns_since_last_pickup: Option<usize>,
 }
 
 impl Game {
@@ -46,7 +49,6 @@ impl Game {
      */
     pub fn new(num_players: usize, mut deck: VecDeque<Card>) -> Self {
         // TODO: should be able to generate_deck
-        //let mut deck = generate_deck::<C>();
         let before_len = deck.len();
         deck = shuffle_deck(deck);
         assert!(deck.len() == before_len);
@@ -64,7 +66,7 @@ impl Game {
             hints: MAX_HINTS,
             bombs: NUM_BOMBS,
             turn_number: 0,
-            //turns_since_last_pickup : None,
+            turns_since_last_pickup: None,
         };
 
         for _ in 0..num_players {
@@ -134,39 +136,25 @@ impl Game {
 
     /**
      * @brief Checks to see if the move follows the rules of hanabi
-     *      1.) If you don't have any hits, you can't hint
-     *      2.) If you have max hints (10) then you can't discard
-     *      [... 2.) If the card isn't in your hand you can't play it ??? ...]
+     *      1.) If there are no hints left, you can't hint
+     *      2.) If all hints are available, then you can't discard
+     *      3.) The index of the card to play or discard must be valid
      */
-    fn legal_move(&self, mv: HanabiMove) -> bool {
-        match mv {
-            // You have hints to give and it's a legal hint
-            HanabiMove::Hint(hint) => self.hints != 0 && self.legal_hint(&hint),
-            HanabiMove::Discard(_) => self.hints != MAX_HINTS,
-            // No way for a play to be illegal
-            _ => true,
+    fn legal_move(&self, mv: &HanabiMove, pub_id: PubID) -> Result<bool, HanabiError> {
+        if pub_id >= self.players.len().try_into()? {
+            return Err(HanabiError::InvalidMove(
+                "PubID is out of range for num players".to_string(),
+            ));
         }
-    }
 
-    /**
-     * @brief Checks to see if the card being played can be played on the current board. Usually,
-     * if this function returns true, the card will be "played". If not, it will be moved to the
-     * discard pile.
-     */
-    fn card_playable(&self, _card: Card) -> bool {
-        todo!()
-    }
-
-    fn finished(&self) -> bool {
-        todo!()
-    }
-
-    fn play_move(
-        &mut self,
-        _play: HanabiMove,
-        _requesting_player_uid: UID,
-    ) -> Result<(), HanabiError> {
-        todo!()
+        Ok(match mv {
+            // You have hints to give and it's a legal hint
+            HanabiMove::Hint(hint) => self.hints != 0 && self.legal_hint(&hint)?,
+            HanabiMove::Discard(idx) => {
+                self.hints != MAX_HINTS && idx < &self.player_hands[pub_id as usize].len()
+            }
+            HanabiMove::Play(idx) => idx < &self.player_hands[pub_id as usize].len(),
+        })
     }
 
     /**
@@ -177,16 +165,138 @@ impl Game {
      *      2.) You can't give a hint for a color to a player if the player doesn't have any cards
      *        of that color
      */
-    fn legal_hint(&self, hint: &HintForPlayer) -> bool {
+    fn legal_hint(&self, hint: &HintForPlayer) -> Result<bool, HanabiError> {
         let (target_player_id, hint_type) = hint;
-        let target_player_hand = &self.player_hands[*target_player_id as usize];
-        match hint_type {
-            Hint::ColorHint(color) => target_player_hand
-                .iter()
-                .any(|x| x.color == *color),
-            Hint::NumberHint(number) => target_player_hand
-                .iter()
-                .any(|x| x.number == *number)
+
+        if target_player_id >= &(self.players.len() as PubID) {
+            return Err(HanabiError::InvalidMove(
+                "PubID is out of range for num players".to_string(),
+            ));
         }
+
+        let target_player_hand = &self.player_hands[*target_player_id as usize];
+        Ok(match hint_type {
+            Hint::ColorHint(color) => target_player_hand.iter().any(|x| x.color == *color),
+            Hint::NumberHint(number) => target_player_hand.iter().any(|x| x.number == *number),
+        })
+    }
+
+    /**
+     * @brief Checks to see if playing the given card is a legal play according to the rules.
+     */
+    fn card_playable(&self, card: &Card) -> bool {
+        let move_color = &card.color;
+        let highest_current_number = self
+            .board
+            .iter()
+            .filter(|c| &c.color == move_color)
+            .map(|c| &c.number)
+            .max();
+
+        // One condition must be satisfied to be playable:
+        //  1.) The highest number of this suit must be the number just below this card (if any)
+
+        number_below(&card.number).as_ref() == highest_current_number
+    }
+
+    fn finished(&self) -> bool {
+        // You win
+        if 25 == self.board.len() {
+            return true;
+        }
+        // You lose
+        if 0 == self.bombs {
+            return true;
+        }
+        // You ran out of turns
+        if Some(self.players.len()) == self.turns_since_last_pickup {
+            return true;
+        }
+
+        false
+    }
+
+    pub fn is_players_turn(&self, player_id: PubID) -> bool {
+        player_id == self.active_player
+    }
+
+    pub fn play_move(
+        &mut self,
+        play: HanabiMove,
+        requesting_player_uid: UID,
+    ) -> Result<(), HanabiError> {
+        // Check to make sure it is this player's turn
+        let requester_pub_id = get_public_id(&self.players, requesting_player_uid)?;
+
+        if self.finished() {
+            return Err(HanabiError::GameFinished);
+        }
+
+        if self.active_player != requester_pub_id {
+            return Err(HanabiError::InvalidMove("It's not your turn!".to_string()));
+        }
+
+        // Check to make sure this is a legal move
+        self.legal_move(&play, requester_pub_id)?;
+
+        // If the card is playable, play it
+        // Else, this is a bomb and move it to the discard
+        match play {
+            HanabiMove::Hint((_pub_id, _hint)) => {}
+            HanabiMove::Discard(idx) => {
+                // Remove
+                let hand = &mut self.player_hands[requester_pub_id as usize];
+                if idx >= hand.len() {
+                    return Err(HanabiError::InvalidMove(format!(
+                        "Cannot discard with idx = '{}' which is out of range of hand size = '{}'",
+                        idx,
+                        hand.len()
+                    )));
+                }
+
+                let removed_card = hand.remove(idx);
+
+                // Discard and get a hint back
+                self.discard.push(removed_card);
+
+                self.hints += 1;
+
+                // Pickup another card
+                let new_card = self.deck.pop_front().expect("Deck somehow is empty");
+                hand.push(new_card);
+            }
+            HanabiMove::Play(idx) => {
+                // Remove
+                let removed_card = {
+                    let hand = &mut self.player_hands[requester_pub_id as usize];
+                    if idx >= hand.len() {
+                        return Err(HanabiError::InvalidMove(format!(
+                            "Cannot play with idx = '{}' which is out of range of hand size = '{}'",
+                            idx,
+                            hand.len()
+                        )));
+                    }
+
+                    hand.remove(idx)
+                };
+
+                // Play if playable, else discard
+                if self.card_playable(&removed_card) {
+                    self.board.push(removed_card);
+                } else {
+                    self.bombs += 1;
+                    self.discard.push(removed_card);
+                }
+
+                // Pickup another card
+                {
+                    let hand = &mut self.player_hands[requester_pub_id as usize];
+                    let new_card = self.deck.pop_front().expect("Deck somehow is empty");
+                    hand.push(new_card);
+                }
+            }
+        }
+
+        Ok(())
     }
 }

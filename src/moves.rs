@@ -1,4 +1,4 @@
-use crate::card::{Card, Color, Number};
+use crate::card::{Color, Number};
 use crate::player::PubID;
 
 #[derive(Debug)]
@@ -11,7 +11,7 @@ pub type HintForPlayer = (PubID, Hint);
 
 #[derive(Debug)]
 pub enum HanabiMove {
-    Play(Card),
-    Discard(Card),
+    Play(usize),    // usize is index in hand of which card to play
+    Discard(usize), // usize is index in hand of which card to discard
     Hint(HintForPlayer),
 }

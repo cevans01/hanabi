@@ -1,5 +1,7 @@
 use std::fmt::Debug;
 
+use crate::errors::HanabiError;
+
 fn generate_uid() -> UID {
     rand::random::<u64>()
 }
@@ -26,6 +28,26 @@ impl Player {
             cohorts: Vec::new(),
         }
     }
+}
+
+pub fn get_public_id(players: &[Player], uid: UID) -> Result<PubID, HanabiError> {
+    players
+        .iter()
+        .find(|p| p.uid == uid)
+        .map(|p| p.public_id)
+        .ok_or_else(|| HanabiError::InvalidMove(
+            "That uid doesn't exist".to_string(),
+        ))
+}
+
+pub fn get_id(players: &[Player], pub_id: PubID) -> Result<UID, HanabiError> {
+    players
+        .iter()
+        .find(|p| p.public_id == pub_id)
+        .map(|p| p.uid)
+        .ok_or_else(|| HanabiError::InvalidMove(
+            "That PubID doesn't exist".to_string(),
+        ))
 }
 
 /**
