@@ -1,11 +1,13 @@
 extern crate bitflags;
 
+use std::collections::VecDeque;
+
 use crate::errors::HanabiError;
 
 // TODO: make a macro that makes both Color, ColorKnowledge, and impls the From trait
 // TODO: same with Number, etc...
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Color {
     Red = 0b00001,
     White = 0b00010,
@@ -23,10 +25,47 @@ pub enum Number {
     Five = 0b10000,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct Card {
-    pub color: Color,
-    pub number: Number,
+    color: Color,
+    number: Number,
+}
+
+impl Card {
+    fn new(color: &Color, number: &Number) -> Card {
+        Card {
+            color: color.clone(),
+            number: number.clone(),
+        }
+    }
+
+    pub fn color(&self) -> Color {
+        self.color.clone()
+    }
+
+    pub fn number(&self) -> Number {
+        self.number.clone()
+    }
+
+    pub fn view(&self) -> CardView {
+        CardView {
+            inner: Card::new(&self.color, &self.number),
+        }
+    }
+}
+
+pub struct CardView {
+    inner: Card,
+}
+
+impl CardView {
+    pub fn color(&self) -> Color {
+        self.inner.color.clone()
+    }
+
+    pub fn number(&self) -> Number {
+        self.inner.number.clone()
+    }
 }
 
 // Private here
@@ -80,7 +119,7 @@ impl From<Number> for NumberKnowledge {
 
 // The best way to keep knowledge about a card is to keep track of what you *don't* know about the
 // card. Much easier to keep track of.
-#[derive(Default)]
+#[derive(Default, Clone, PartialEq, Eq)]
 pub struct CardKnowledge {
     pub not_these_colors: ColorKnowledge,
     pub not_these_numbers: NumberKnowledge,
@@ -129,4 +168,34 @@ pub fn apply_number_knowledge(
             not_these_numbers: new_numbers,
         })
     }
+}
+
+// This is messy... It doesn't really need to take a functor for card frequencies... this code used
+// to live in rules.rs but it needs to construct `Card`s and I wanted to make Card have a "private
+// constructor" so I moved here but kept card_frequencies in rules.rs
+pub fn generate_deck<F: Fn(&Number) -> u8>(card_frequencies: F) -> VecDeque<Card> {
+    let colors = vec![
+        Color::Red,
+        Color::White,
+        Color::Blue,
+        Color::Green,
+        Color::Yellow,
+    ];
+    let numbers = vec![
+        Number::One,
+        Number::Two,
+        Number::Three,
+        Number::Four,
+        Number::Five,
+    ];
+
+    let mut deck = VecDeque::new();
+    for col in &colors {
+        for num in &numbers {
+            for _ in 0..card_frequencies(num) {
+                deck.push_front(Card::new(&col, &num));
+            }
+        }
+    }
+    deck
 }
