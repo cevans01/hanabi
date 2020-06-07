@@ -9,6 +9,7 @@ use crate::errors::HanabiError;
 use crate::moves::{HanabiMove, Hint, HintForPlayer};
 use crate::player::{generate_players, get_public_id, Player, PubID, UID};
 use crate::rules::{number_below, GameResultState, MAX_HINTS, NUM_BOMBS};
+use crate::rules::{MAX_PLAYERS, MIN_PLAYERS};
 
 /**
  * @brief Shuffle an existing deck
@@ -46,16 +47,14 @@ impl Game {
     /**
      * @brief Create a new Game
      */
-    pub fn new(num_players: usize, mut deck: VecDeque<Card>) -> Self {
-        // TODO: should be able to generate_deck
-        let before_len = deck.len();
+    pub fn new(num_players: usize, mut deck: VecDeque<Card>) -> Result<Self, HanabiError> {
+        if num_players > MAX_PLAYERS.into() || num_players < MIN_PLAYERS.into() {
+            return Err(HanabiError::LogicError("Invalid number of players".to_string()));
+        }
+
+        // TODO: consider moving generate_deck code here
         deck = shuffle_deck(deck);
-        assert!(deck.len() == before_len);
-        assert!(num_players < 6 && num_players > 1);
-        println!("deck.len() = {:?}", deck.len());
         let mut game = Game {
-            // SUUUPER annoying that it can't create the deck itself and must be passed in. TODO
-            // FIX THIS
             deck,
             discard: Vec::new(),
             board: Vec::new(),
@@ -69,9 +68,8 @@ impl Game {
 
         game.deal_cards();
 
-        assert_eq!(num_players, game.players.len());
 
-        game
+        Ok(game)
     }
 
     /**
@@ -86,7 +84,6 @@ impl Game {
             4 | 5 => 4,
             _ => unreachable!(),
         };
-        println!("cards_to_deal = {:?}", cards_to_deal);
 
         for _ in 0..cards_to_deal {
             for p in &mut self.players {
@@ -186,10 +183,10 @@ impl Game {
     /**
      * @brief Checks to see if a hint is legal in the game
      *
-     *      1.) You can't give a hint for a number to a player if the player doesn't have any cards
-     *        of that number
-     *      2.) You can't give a hint for a color to a player if the player doesn't have any cards
-     *        of that color
+     * 1.) You can't give a hint for a number to a player if the player doesn't have any cards
+     *   of that number
+     * 2.) You can't give a hint for a color to a player if the player doesn't have any cards
+     *   of that color
      */
     fn legal_hint(&self, hint: &HintForPlayer) -> Result<bool, HanabiError> {
         let (target_player_id, hint_type) = hint;
@@ -335,5 +332,73 @@ impl Game {
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn shuffle_deck_test() {
+        use crate::rules::generate_normal_deck;
+
+        let deck = generate_normal_deck();
+        let before_len = deck.len();
+
+        let shuffled = shuffle_deck(deck);
+        let after_len = shuffled.len();
+
+        assert!(before_len == after_len);
+    }
+
+    fn deal_cards_for_num_players(num_players: usize) {
+        use crate::rules::generate_normal_deck;
+
+        let mut deck = generate_normal_deck();
+        deck = shuffle_deck(deck);
+
+        let deck_len = deck.len();
+
+        let mut game = Game {
+            deck,
+            discard: Vec::new(),
+            board: Vec::new(),
+            players: generate_players(num_players),
+            active_player: 0,
+            hints: MAX_HINTS,
+            bombs: NUM_BOMBS,
+            //turn_number: 0,
+            turns_since_last_pickup: None,
+        };
+
+        game.deal_cards();
+
+        assert_eq!(num_players, game.players.len());
+        assert_eq!(deck_len, game.deck.len() + game.players.iter().fold(0usize, |mut sum, p| {sum += p.hand_len(); sum}));
+    }
+
+    #[test]
+    fn deal_cards_test_two() {
+        let num_players = 2;
+        deal_cards_for_num_players(num_players);
+    }
+
+    #[test]
+    fn deal_cards_test_three() {
+        let num_players = 3;
+        deal_cards_for_num_players(num_players);
+    }
+
+    #[test]
+    fn deal_cards_test_four() {
+        let num_players = 4;
+        deal_cards_for_num_players(num_players);
+    }
+
+    #[test]
+    fn deal_cards_test_five() {
+        let num_players = 5;
+        deal_cards_for_num_players(num_players);
     }
 }

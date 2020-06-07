@@ -7,7 +7,7 @@ use crate::errors::HanabiError;
 // TODO: make a macro that makes both Color, ColorKnowledge, and impls the From trait
 // TODO: same with Number, etc...
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Color {
     Red = 0b00001,
     White = 0b00010,
@@ -16,7 +16,7 @@ pub enum Color {
     Yellow = 0b10000,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Number {
     One = 0b00001,
     Two = 0b00010,
@@ -134,7 +134,44 @@ impl CardKnowledge {
     }
 }
 
-pub fn apply_color_knowledge(
+pub fn this_color(
+    ck: CardKnowledge,
+    color: Color,
+) -> Result<CardKnowledge, HanabiError> {
+    // For a sanity check, just make sure that Card::not_these_colors doesn't have the color bit
+    // set already ... would indicate some sort of logic error in the game overall since we should
+    // never indicate a card both "is" and "is not" a given color at the same time.
+
+    if ck.not_these_colors != (ck.not_these_colors | color.into()) {
+        return Err(HanabiError::LogicError("Card was previously designated as not being this color, indicating an internal game logic error".to_string()));
+    }
+
+    let new_colors = ColorKnowledge::ALL_COLORS ^ color.into();
+
+    Ok(CardKnowledge {
+        not_these_colors: new_colors,
+        not_these_numbers: ck.not_these_numbers,
+    })
+}
+
+pub fn this_number(
+    ck: CardKnowledge,
+    number: Number,
+) -> Result<CardKnowledge, HanabiError> {
+    // Sanity check -- see above in this_color()
+    if ck.not_these_numbers != (ck.not_these_numbers | number.into()) {
+        return Err(HanabiError::LogicError("Card was previously designated as not being this number, indicating an internal game logic error".to_string()));
+    }
+
+    let new_numbers = NumberKnowledge::ALL_NUMBERS ^ number.into();
+
+    Ok(CardKnowledge {
+        not_these_colors: ck.not_these_colors,
+        not_these_numbers: new_numbers,
+    })
+}
+
+pub fn not_this_color(
     ck: CardKnowledge,
     color: Color,
 ) -> Result<CardKnowledge, HanabiError> {
@@ -152,7 +189,7 @@ pub fn apply_color_knowledge(
     }
 }
 
-pub fn apply_number_knowledge(
+pub fn not_this_number(
     ck: CardKnowledge,
     number: Number,
 ) -> Result<CardKnowledge, HanabiError> {

@@ -97,21 +97,26 @@ pub fn generate_players(num_players: usize) -> Vec<Player> {
     // Create the players
     for public_id in 0..num_players {
         let uid = generate_uid();
-        /*
-        let cohorts: Vec<(PubID, CardKnowledge)> = all_public_ids
-            .iter()
-            .filter(|&p| *p != public_id as u8)
-            .cloned()
-            .map(|pub_id| (pub_id, CardKnowledge::new()))
-            .collect();
-        */
         let new_player = Player {
             public_id: public_id as u8,
             uid,
             hand: Vec::new(),
-            //cohorts,
         };
         players.push(new_player);
     }
     players
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn generate_players_test() {
+        let num_players = 5;
+
+        let players = generate_players(num_players);
+
+        assert!(players.len() == num_players);
+    }
 }

@@ -1,10 +1,11 @@
 #![allow(dead_code)]
 use hanabi::game::*;
 use hanabi::rules::*;
+use hanabi::errors::*;
 
-pub fn play() {
+pub fn play() -> Result<(), HanabiError> {
     let deck = generate_normal_deck();
-    let _g = Game::new(3, deck);
+    let _g = Game::new(3, deck)?;
 
     //println!("{:?}", g.player_hands[0]);
 
@@ -15,8 +16,12 @@ pub fn play() {
     //while !g.finished() {
     //comms::get_move()
     //}
+
+    Ok(())
 }
 
-pub fn main() {
-    play();
+pub fn main() -> Result<(), HanabiError> {
+    play()?;
+
+    Ok(())
 }
