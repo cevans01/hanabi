@@ -1,7 +1,7 @@
 #![allow(dead_code)]
+use hanabi::errors::*;
 use hanabi::game::*;
 use hanabi::rules::*;
-use hanabi::errors::*;
 
 pub fn play() -> Result<(), HanabiError> {
     let deck = generate_normal_deck();

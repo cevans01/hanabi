@@ -24,7 +24,7 @@ pub fn cards_to_deal(num_players: u8) -> Result<u8, HanabiError> {
     }
 }
 
-pub fn card_frequencies(num: &Number) -> u8 {
+pub fn card_frequencies(num: Number) -> u8 {
     match num {
         Number::One => 3,
         Number::Two => 2,
@@ -34,7 +34,7 @@ pub fn card_frequencies(num: &Number) -> u8 {
     }
 }
 
-pub fn number_below(num: &Number) -> Option<Number> {
+pub fn number_below(num: Number) -> Option<Number> {
     match num {
         Number::One => None,
         Number::Two => Some(Number::One),
@@ -45,5 +45,5 @@ pub fn number_below(num: &Number) -> Option<Number> {
 }
 
 pub fn generate_normal_deck() -> VecDeque<Card> {
-    generate_deck(|num| card_frequencies(&num))
+    generate_deck(|num| card_frequencies(*num))
 }

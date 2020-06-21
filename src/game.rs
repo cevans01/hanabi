@@ -49,7 +49,9 @@ impl Game {
      */
     pub fn new(num_players: usize, mut deck: VecDeque<Card>) -> Result<Self, HanabiError> {
         if num_players > MAX_PLAYERS.into() || num_players < MIN_PLAYERS.into() {
-            return Err(HanabiError::LogicError("Invalid number of players".to_string()));
+            return Err(HanabiError::LogicError(
+                "Invalid number of players".to_string(),
+            ));
         }
 
         // TODO: consider moving generate_deck code here
@@ -67,7 +69,6 @@ impl Game {
         };
 
         game.deal_cards();
-
 
         Ok(game)
     }
@@ -199,8 +200,8 @@ impl Game {
 
         let target_player = &self.players[*target_player_id as usize];
         Ok(match hint_type {
-            Hint::ColorHint(color) => target_player.any_of_color(&color),
-            Hint::NumberHint(number) => target_player.any_of_number(&number),
+            Hint::ColorHint(color) => target_player.any_of_color(*color),
+            Hint::NumberHint(number) => target_player.any_of_number(*number),
         })
     }
 
@@ -219,7 +220,7 @@ impl Game {
         // One condition must be satisfied to be playable:
         //  1.) The highest number of this suit must be the number just below this card (if any)
 
-        number_below(&card.number()) == highest_current_number
+        number_below(card.number()) == highest_current_number
     }
 
     fn score(&self) -> usize {
@@ -276,7 +277,9 @@ impl Game {
         // If the card is playable, play it
         // Else, this is a bomb and move it to the discard
         match play {
-            HanabiMove::Hint((_pub_id, _hint)) => {}
+            HanabiMove::Hint((pub_id, hint)) => {
+                self.players[pub_id as usize].give_hint(hint)?;
+            }
             HanabiMove::Discard(idx) => {
                 // Remove
                 let p = &mut self.players[requester_pub_id as usize];
@@ -340,7 +343,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn shuffle_deck_test() {
+    fn test_shuffle_deck() {
         use crate::rules::generate_normal_deck;
 
         let deck = generate_normal_deck();
@@ -375,29 +378,36 @@ mod tests {
         game.deal_cards();
 
         assert_eq!(num_players, game.players.len());
-        assert_eq!(deck_len, game.deck.len() + game.players.iter().fold(0usize, |mut sum, p| {sum += p.hand_len(); sum}));
+        assert_eq!(
+            deck_len,
+            game.deck.len()
+                + game.players.iter().fold(0usize, |mut sum, p| {
+                    sum += p.hand_len();
+                    sum
+                })
+        );
     }
 
     #[test]
-    fn deal_cards_test_two() {
+    fn test_deal_cards_two() {
         let num_players = 2;
         deal_cards_for_num_players(num_players);
     }
 
     #[test]
-    fn deal_cards_test_three() {
+    fn test_deal_cards_three() {
         let num_players = 3;
         deal_cards_for_num_players(num_players);
     }
 
     #[test]
-    fn deal_cards_test_four() {
+    fn test_deal_cards_four() {
         let num_players = 4;
         deal_cards_for_num_players(num_players);
     }
 
     #[test]
-    fn deal_cards_test_five() {
+    fn test_deal_cards_five() {
         let num_players = 5;
         deal_cards_for_num_players(num_players);
     }

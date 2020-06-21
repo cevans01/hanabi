@@ -1,5 +1,9 @@
 //use std::fmt::Debug;
-use crate::card::{Card, CardKnowledge, CardView, Color, Number};
+use crate::card::{
+    not_this_color, not_this_number, this_color, this_number, Card, CardKnowledge, CardView, Color,
+    Number,
+};
+use crate::moves::Hint;
 use crate::rules::{MAX_PLAYERS, MIN_PLAYERS};
 
 use crate::errors::HanabiError;
@@ -20,7 +24,6 @@ pub struct Player {
     pub uid: UID,
 
     hand: Vec<(Card, CardKnowledge)>,
-    //cohorts: Vec<(PubID, CardKnowledge)>,
 }
 
 impl Player {
@@ -54,12 +57,12 @@ impl Player {
         self.hand.len()
     }
 
-    pub fn any_of_color(&self, color: &Color) -> bool {
-        self.hand.iter().any(|(x, _)| x.color() == *color)
+    pub fn any_of_color(&self, color: Color) -> bool {
+        self.hand.iter().any(|(x, _)| x.color() == color)
     }
 
-    pub fn any_of_number(&self, number: &Number) -> bool {
-        self.hand.iter().any(|(x, _)| x.number() == *number)
+    pub fn any_of_number(&self, number: Number) -> bool {
+        self.hand.iter().any(|(x, _)| x.number() == number)
     }
 
     pub fn get_knowledge(&self) -> Vec<CardKnowledge> {
@@ -67,6 +70,31 @@ impl Player {
             .iter()
             .map(|(_, knowledge)| knowledge.clone())
             .collect()
+    }
+
+    pub fn give_hint(&mut self, hint: Hint) -> Result<(), HanabiError> {
+        match hint {
+            Hint::ColorHint(color) => {
+                for (card, card_knowledge) in &mut self.hand {
+                    if card.color() == color {
+                        *card_knowledge = this_color(card_knowledge.clone(), color)?;
+                    } else {
+                        *card_knowledge = not_this_color(card_knowledge.clone(), color)?;
+                    }
+                }
+            }
+            Hint::NumberHint(number) => {
+                for (card, card_knowledge) in &mut self.hand {
+                    if card.number() == number {
+                        *card_knowledge = this_number(card_knowledge.clone(), number)?;
+                    } else {
+                        *card_knowledge = not_this_number(card_knowledge.clone(), number)?;
+                    }
+                }
+            }
+        }
+
+        Ok(())
     }
 }
 
@@ -78,6 +106,7 @@ pub fn get_public_id(players: &[Player], uid: UID) -> Result<PubID, HanabiError>
         .ok_or_else(|| HanabiError::InvalidMove("That uid doesn't exist".to_string()))
 }
 
+// TODO: might be able to remove this
 pub fn get_id(players: &[Player], pub_id: PubID) -> Result<UID, HanabiError> {
     players
         .iter()
@@ -110,13 +139,97 @@ pub fn generate_players(num_players: usize) -> Vec<Player> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::card::{CardKnowledge, ColorKnowledge, NumberKnowledge};
 
     #[test]
-    fn generate_players_test() {
-        let num_players = 5;
+    fn test_generate_players() {
+        for num_players in 2..6 {
+            let players = generate_players(num_players);
+            assert!(players.len() == num_players);
+        }
+    }
 
-        let players = generate_players(num_players);
+    #[test]
+    fn test_give_hint() {
+        let mut player = Player {
+            public_id: 0,
+            uid: generate_uid(),
+            hand: Vec::new(),
+        };
 
-        assert!(players.len() == num_players);
+        player.push_card(Card::new(Color::Red, Number::One));
+        player.push_card(Card::new(Color::Red, Number::One));
+        player.push_card(Card::new(Color::Red, Number::Two));
+        player.push_card(Card::new(Color::White, Number::Five));
+        player.push_card(Card::new(Color::Blue, Number::Two));
+
+        // ------------------
+        // First hint
+        // ------------------
+        player.give_hint(Hint::ColorHint(Color::Red)).unwrap();
+
+        let hand_knowledge: Vec<CardKnowledge> = (0..(player.hand_len()))
+            .map(|idx| player.hand_at(idx))
+            .map(|(_, knowledge)| knowledge.clone())
+            .collect();
+
+        let expected_knowledge = vec![
+            CardKnowledge {
+                not_these_colors: ColorKnowledge::ALL_COLORS ^ ColorKnowledge::RED,
+                not_these_numbers: NumberKnowledge::default(),
+            },
+            CardKnowledge {
+                not_these_colors: ColorKnowledge::ALL_COLORS ^ ColorKnowledge::RED,
+                not_these_numbers: NumberKnowledge::default(),
+            },
+            CardKnowledge {
+                not_these_colors: ColorKnowledge::ALL_COLORS ^ ColorKnowledge::RED,
+                not_these_numbers: NumberKnowledge::default(),
+            },
+            CardKnowledge {
+                not_these_colors: ColorKnowledge::RED,
+                not_these_numbers: NumberKnowledge::default(),
+            },
+            CardKnowledge {
+                not_these_colors: ColorKnowledge::RED,
+                not_these_numbers: NumberKnowledge::default(),
+            },
+        ];
+        assert_eq!(hand_knowledge, expected_knowledge);
+
+        // ------------------
+        // Second hint
+        // ------------------
+        player.give_hint(Hint::NumberHint(Number::Two)).unwrap();
+
+        let hand_knowledge: Vec<CardKnowledge> = (0..(player.hand_len()))
+            .map(|idx| player.hand_at(idx))
+            .map(|(_, knowledge)| knowledge.clone())
+            .collect();
+
+        let expected_knowledge = vec![
+            CardKnowledge {
+                not_these_colors: ColorKnowledge::ALL_COLORS ^ ColorKnowledge::RED,
+                not_these_numbers: NumberKnowledge::TWO,
+            },
+            CardKnowledge {
+                not_these_colors: ColorKnowledge::ALL_COLORS ^ ColorKnowledge::RED,
+                not_these_numbers: NumberKnowledge::TWO,
+            },
+            CardKnowledge {
+                not_these_colors: ColorKnowledge::ALL_COLORS ^ ColorKnowledge::RED,
+                not_these_numbers: NumberKnowledge::ALL_NUMBERS ^ NumberKnowledge::TWO,
+            },
+            CardKnowledge {
+                not_these_colors: ColorKnowledge::RED,
+                not_these_numbers: NumberKnowledge::TWO,
+            },
+            CardKnowledge {
+                not_these_colors: ColorKnowledge::RED,
+                not_these_numbers: NumberKnowledge::ALL_NUMBERS ^ NumberKnowledge::TWO,
+            },
+        ];
+
+        assert_eq!(hand_knowledge, expected_knowledge);
     }
 }
